@@ -118,7 +118,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 
 REST_FRAMEWORK = {
-    # 'EXCEPTION_HANDLER': 'app.utils.exceptions.exception_handler',
+    'EXCEPTION_HANDLER': 'main.exceptions.exception_handler',
     'DATE_INPUT_FORMATS': ['iso-8601', 'rfc-3339'],
     'TEST_REQUEST_DEFAULT_FORMAT': 'json',
     'DEFAULT_RENDERER_CLASSES': (
