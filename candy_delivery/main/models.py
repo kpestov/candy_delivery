@@ -1,5 +1,13 @@
+import enum
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
+
+
+@enum.unique
+class CourierType(enum.IntEnum):
+    foot = 10
+    bike = 15
+    car = 50
 
 
 class Courier(models.Model):
@@ -10,7 +18,7 @@ class Courier(models.Model):
         working_hours  - график работы курьера (массив строк: [HH:MM-HH:MM, ...])
     """
 
-    courier_type = models.CharField(max_length=4, choices=[(0, 'foot'), (1, 'bike'), (2, 'car')])
+    courier_type = models.CharField(max_length=4)
     working_hours = ArrayField(models.CharField(max_length=11), blank=True, default=list)
 
     def __str__(self):
