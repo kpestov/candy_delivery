@@ -1,3 +1,52 @@
 from django.db import models
+from django.contrib.postgres.fields import ArrayField
 
-# Create your models here.
+
+class Courier(models.Model):
+    """
+    Модель курьера
+    Attributes:
+        courier_type - тип курьера. Возможные значения: foot, bike, car
+        working_hours  - график работы курьера (массив строк: [HH:MM-HH:MM, ...])
+    """
+
+    courier_type = models.CharField(max_length=4, choices=[(0, 'foot'), (1, 'bike'), (2, 'car')])
+    working_hours = ArrayField(models.CharField(max_length=11), blank=True, default=list)
+
+    def __str__(self):
+        return f'[pk: {self.pk}] [courier_type: {self.courier_type}] [working_hours: {self.working_hours}]'
+
+
+class Region(models.Model):
+    """
+    Модель района, в котором может работать курьер
+    Attributes:
+        couriers - курьеры, работающие в данном районе
+    """
+    couriers = models.ManyToManyField(Courier, related_name='regions', db_table='main_region_m2m_courier')
+
+    def __str__(self):
+        return f'[pk: {self.pk}]'
+
+
+class Order(models.Model):
+    """
+    Модель заказа
+    Attributes:
+        weight - вес заказа в кг. Ограничения по весу: 0.01 <= weight <= 50
+        region - район, в который необходимо доставить заказ
+        courier - курьер, который должен доставить заказ
+        assign_time - время назначения заказа
+        complete_time - время выполнения заказа
+        delivery_hours - временные промежутки, в которые клиенту удобно принять заказ (массив строк: [HH:MM-HH:MM, ...])
+    """
+
+    weight = models.DecimalField(max_digits=4, decimal_places=2)
+    region = models.ForeignKey(Region, related_name='orders', on_delete=models.SET_NULL, null=True)
+    courier = models.ForeignKey(Courier, related_name='orders', on_delete=models.SET_NULL, null=True)
+    assign_time = models.DateTimeField(null=True)
+    complete_time = models.DateTimeField(null=True)
+    delivery_hours = ArrayField(models.CharField(max_length=11), blank=False, default=list)
+
+    def __str__(self):
+        return f'[pk: {self.pk}] [region: {self.region}] [courier: {self.courier}]'

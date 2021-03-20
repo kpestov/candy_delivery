@@ -76,3 +76,5 @@ static_root/
 **/static/**/*.map
 
 .DS_Store/
+
+notes.txt
