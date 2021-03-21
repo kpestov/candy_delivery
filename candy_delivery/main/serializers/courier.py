@@ -5,23 +5,16 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.validators import ValidationError
 
-from . import base_serializers
-from .models import Courier, CourierType, Region
-
-
-class UintListField(serializers.ListField):
-    child = serializers.IntegerField(min_value=0)
-
-
-class StringListField(serializers.ListField):
-    child = serializers.CharField(max_length=11)
+from .. import base_serializers
+from ..serializers.region import RegionSerializer
+from ..models import Courier, CourierType, Region
 
 
 class CourierSerializer(base_serializers.ModelSerializer):
     courier_id = serializers.IntegerField(source='id', required=True)
     courier_type = serializers.ChoiceField(required=True, choices=[field.name for field in CourierType])
-    regions = UintListField(min_length=1, default=list)
-    working_hours = StringListField(default=list)
+    regions = base_serializers.UintListField(min_length=1, default=list)
+    working_hours = base_serializers.StringListField(default=list)
 
     class Meta:
         model = Courier
@@ -41,7 +34,16 @@ class CourierSerializer(base_serializers.ModelSerializer):
         return time_intervals
 
 
-class CourierSerializerOut(base_serializers.Serializer):
+class CourierSerializerOut(CourierSerializer):
+    courier_id = serializers.IntegerField(source='pk', read_only=True)
+    regions = RegionSerializer(many=True)
+
+    class Meta:
+        model = Courier
+        fields = ('courier_id', 'courier_type', 'working_hours', 'regions')
+
+
+class CourierListSerializerOut(base_serializers.Serializer):
     id = serializers.IntegerField(source='pk', read_only=True)
 
     class Meta:
@@ -69,9 +71,7 @@ class CourierListSerializer(base_serializers.Serializer):
             validated_courier_data.get('regions')
             for validated_courier_data in validated_couriers
         ]
-        Region.objects.bulk_create([
-            Region(id=region_id) for region_id in set(chain.from_iterable(region_ids))
-        ])
+        Region.write_new_regions(set(chain.from_iterable(region_ids)))
 
     def _bulk_create_couriers_regions(self, validated_couriers):
         region_to_courier_links = []
@@ -92,3 +92,42 @@ class CourierListSerializer(base_serializers.Serializer):
             self._bulk_create_regions(validated_couriers)
             self._bulk_create_couriers_regions(validated_couriers)
         return created_couriers
+
+
+class UpdateCourierArgsSerializer(CourierSerializer):
+    courier_type = serializers.ChoiceField(required=False, choices=[field.name for field in CourierType])
+    regions = base_serializers.UintListField(min_length=1, default=list, required=False)
+    working_hours = base_serializers.StringListField(required=False)
+
+    class Meta:
+        model = Courier
+        fields = ('courier_type', 'regions', 'working_hours')
+
+    def validate(self, data):
+        if not data.get('courier_type') and not data.get('regions') and not data.get('working_hours'):
+            raise ValidationError()
+        return data
+
+    def update(self, instance, validated_data):
+        regions_to_update = validated_data.get('regions')
+
+        with transaction.atomic():
+            for key, value in validated_data.items():
+                if key != 'regions':
+                    setattr(instance, key, value)
+
+            if regions_to_update:
+                current_regions = instance.regions.values_list('id', flat=True)
+                regions_to_add = set(regions_to_update).difference(set(current_regions))
+
+                Region.write_new_regions(regions_to_add)
+
+                regions_to_remove = set(current_regions).difference(set(regions_to_update))
+                regions_to_add = regions_to_add.union(set(current_regions))
+
+                instance.regions.set(regions_to_add)
+                instance.regions.through.objects.filter(region_id__in=regions_to_remove).delete()
+
+            instance.save()
+
+        return instance
