@@ -4,20 +4,16 @@ from rest_framework.response import Response
 
 from .serializers import CourierListSerializer, CourierSerializerOut, CourierSerializer
 from .exceptions import APIError
+from .utils import collect_invalid_objects
 
 
 class CourierCreateView(APIView):
     def post(self, request):
-        invalid_couriers = []
-        for courier in request.data.get('data'):
-            serializer = CourierSerializer(data=courier)
-            if not serializer.is_valid():
-                invalid_couriers.append({'id': serializer.data.get('courier_id')})
-
+        invalid_couriers = collect_invalid_objects(request, CourierSerializer, obj_key='courier_id')
         if invalid_couriers:
             raise APIError(
-                instances_name='couriers',
-                invalid_instances=invalid_couriers
+                objects_name='couriers',
+                invalid_objects=invalid_couriers
             )
 
         created_couriers = CourierListSerializer(data=request.data).load_and_save()

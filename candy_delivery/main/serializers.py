@@ -1,7 +1,9 @@
+from datetime import datetime
 from itertools import chain
 
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework.validators import ValidationError
 
 from . import base_serializers
 from .models import Courier, CourierType, Region
@@ -20,11 +22,23 @@ class CourierSerializer(base_serializers.ModelSerializer):
     courier_type = serializers.ChoiceField(required=True, choices=[field.name for field in CourierType])
     regions = UintListField(min_length=1, default=list)
     working_hours = StringListField(default=list)
-    # todo: написать валидацию на формат промежутков врмени working_hours (HH:MM-HH:MM)
 
     class Meta:
         model = Courier
         fields = ('courier_id', 'courier_type', 'regions', 'working_hours')
+
+    def validate_working_hours(self, time_intervals):
+        valid_time_format = "%H:%M"
+        for time_interval in time_intervals:
+            try:
+                start, end = time_interval.split('-')
+                valid_start = datetime.strptime(start, valid_time_format)
+                valid_end = datetime.strptime(end, valid_time_format)
+                if valid_start > valid_end:
+                    raise ValidationError('Start time can not be greater than end time')
+            except ValueError:
+                raise ValidationError('Invalid input working hours')
+        return time_intervals
 
 
 class CourierSerializerOut(base_serializers.Serializer):
