@@ -1,4 +1,3 @@
-from datetime import datetime
 from itertools import chain
 
 from django.db import transaction
@@ -8,6 +7,7 @@ from rest_framework.validators import ValidationError
 from .. import base_serializers
 from ..serializers.region import RegionSerializer
 from ..models import Courier, CourierType, Region
+from ..utils import validate_time_intervals
 
 
 class CourierSerializer(base_serializers.ModelSerializer):
@@ -21,17 +21,7 @@ class CourierSerializer(base_serializers.ModelSerializer):
         fields = ('courier_id', 'courier_type', 'regions', 'working_hours')
 
     def validate_working_hours(self, time_intervals):
-        valid_time_format = "%H:%M"
-        for time_interval in time_intervals:
-            try:
-                start, end = time_interval.split('-')
-                valid_start = datetime.strptime(start, valid_time_format)
-                valid_end = datetime.strptime(end, valid_time_format)
-                if valid_start > valid_end:
-                    raise ValidationError('Start time can not be greater than end time')
-            except ValueError:
-                raise ValidationError('Invalid input working hours')
-        return time_intervals
+        return validate_time_intervals(time_intervals)
 
 
 class CourierSerializerOut(CourierSerializer):
@@ -66,13 +56,6 @@ class CourierListSerializer(base_serializers.Serializer):
             ) for validated_courier_data in validated_couriers
         ])
 
-    def _bulk_create_regions(self, validated_couriers):
-        region_ids = [
-            validated_courier_data.get('regions')
-            for validated_courier_data in validated_couriers
-        ]
-        Region.write_new_regions(set(chain.from_iterable(region_ids)))
-
     def _bulk_create_couriers_regions(self, validated_couriers):
         region_to_courier_links = []
         for validated_courier_data in validated_couriers:
@@ -89,7 +72,8 @@ class CourierListSerializer(base_serializers.Serializer):
         validated_couriers = data.get('data')
         with transaction.atomic():
             created_couriers = self._bulk_create_couriers(validated_couriers)
-            self._bulk_create_regions(validated_couriers)
+
+            RegionSerializer.bulk_create_regions(validated_couriers, obj_key='regions')
             self._bulk_create_couriers_regions(validated_couriers)
         return created_couriers
 
@@ -120,7 +104,7 @@ class UpdateCourierArgsSerializer(CourierSerializer):
                 current_regions = instance.regions.values_list('id', flat=True)
                 regions_to_add = set(regions_to_update).difference(set(current_regions))
 
-                Region.write_new_regions(regions_to_add)
+                Region.create_new_regions(regions_to_add)
 
                 regions_to_remove = set(current_regions).difference(set(regions_to_update))
                 regions_to_add = regions_to_add.union(set(current_regions))

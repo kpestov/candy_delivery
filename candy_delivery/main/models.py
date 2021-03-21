@@ -37,7 +37,7 @@ class Region(models.Model):
         return f'[pk: {self.pk}]'
 
     @classmethod
-    def write_new_regions(cls, regions_to_add: set):
+    def create_new_regions(cls, regions_to_add: set):
         regions_from_db = cls.objects.filter(id__in=regions_to_add).values_list('id', flat=True)
         if len(regions_to_add) != len(regions_from_db):
             regions_to_write = regions_to_add.difference(set(regions_from_db))

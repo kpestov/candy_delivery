@@ -8,6 +8,9 @@ from .serializers.courier import (
     CourierListSerializer, CourierListSerializerOut, CourierSerializer,
     UpdateCourierArgsSerializer, CourierSerializerOut
 )
+from .serializers.order import (
+    OrderSerializer, OrderListSerializer, OrderListSerializerOut
+)
 from .exceptions import APIError
 from .utils import collect_invalid_objects
 from .models import Courier
@@ -42,4 +45,23 @@ class CourierUpdateView(GenericAPIView):
         return Response(
                 CourierSerializerOut(updated_courier).data,
                 status=status.HTTP_200_OK
+        )
+
+
+class OrderCreateView(APIView):
+    # todo: Сделать миксин из OrderCreateView и CourierCreateView, чтобы не было дублирования кода
+    def post(self, request):
+        invalid_orders = collect_invalid_objects(request, OrderSerializer, obj_key='order_id')
+        if invalid_orders:
+            raise APIError(
+                objects_name='orders',
+                invalid_objects=invalid_orders
+            )
+
+        created_orders = OrderListSerializer(data=request.data).load_and_save()
+        return Response(
+            {
+                'orders': OrderListSerializerOut(created_orders, many=True).data
+            },
+            status=status.HTTP_201_CREATED
         )
