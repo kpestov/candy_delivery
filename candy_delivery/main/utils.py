@@ -4,7 +4,15 @@ from rest_framework.validators import ValidationError
 from rest_framework.response import Response
 from rest_framework import status
 
-from .exceptions import APIError
+from .exceptions import APIError, Http400
+
+
+def get_object_or_400(klass, *args, **kwargs):
+    try:
+        obj = klass.objects.get(*args, **kwargs)
+    except klass.DoesNotExist:
+        raise Http400()
+    return obj
 
 
 def collect_invalid_objects(request, serializer_cls, obj_key: str):

@@ -25,6 +25,10 @@ class APIError(APIException):
             raise ValueError('supported only str detail')
 
 
+class Http400(APIError):
+    pass
+
+
 def exception_handler(exc, context):
     logger.exception(f'caught unhandled exception: {exc}')
     response = rest_framework.views.exception_handler(exc, context)
@@ -35,5 +39,8 @@ def exception_handler(exc, context):
     if isinstance(exc, APIError):
         response.data.pop('detail')
         response.data['validation_error'] = {exc.objects_name: exc.invalid_objects}
+
+    if isinstance(exc, Http400):
+        response.data.pop('validation_error')
 
     return response

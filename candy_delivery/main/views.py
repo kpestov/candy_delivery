@@ -6,17 +6,18 @@ from rest_framework.response import Response
 
 from .serializers.courier import (
     CourierListSerializer, CourierListSerializerOut, CourierSerializer,
-    UpdateCourierArgsSerializer, CourierSerializerOut
+    UpdateCourierArgsSerializer, CourierSerializerOut, CourierSerializerIn
 )
 from .serializers.order import (
-    OrderSerializer, OrderListSerializer, OrderListSerializerOut
+    OrderSerializer, OrderListSerializer,
+    OrderListSerializerOut
 )
 
 from .models import Courier
-from .utils import CreateViewMixin
+from .utils import CreateViewMixin, get_object_or_400
 
 
-class CourierCreateView(CreateViewMixin, APIView):
+class CouriersCreateView(CreateViewMixin, APIView):
     obj_key = 'courier_id'
     objects_name = 'couriers'
     serializer = CourierSerializer
@@ -24,7 +25,7 @@ class CourierCreateView(CreateViewMixin, APIView):
     serializer_out = CourierListSerializerOut
 
 
-class OrderCreateView(CreateViewMixin, APIView):
+class OrdersCreateView(CreateViewMixin, APIView):
     obj_key = 'order_id'
     objects_name = 'orders'
     serializer = OrderSerializer
@@ -44,3 +45,10 @@ class CourierUpdateView(GenericAPIView):
                 CourierSerializerOut(updated_courier).data,
                 status=status.HTTP_200_OK
         )
+
+
+class OrdersAssignView(APIView):
+    def post(self, request):
+        courier_data = CourierSerializerIn(data=request.data).load()
+        courier = get_object_or_400(Courier, id=courier_data.get('courier_id'))
+        return Response({courier.pk})

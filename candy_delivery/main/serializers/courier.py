@@ -10,6 +10,13 @@ from ..models import Courier, CourierType, Region
 from ..utils import validate_time_intervals
 
 
+class CourierSerializerIn(base_serializers.Serializer):
+    courier_id = serializers.IntegerField(required=True)
+
+    class Meta:
+        fields = ('courier_id',)
+
+
 class CourierSerializer(base_serializers.ModelSerializer):
     courier_id = serializers.IntegerField(source='id', required=True)
     courier_type = serializers.ChoiceField(required=True, choices=[field.name for field in CourierType])
