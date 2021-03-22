@@ -23,9 +23,8 @@ class OrderSerializer(base_serializers.ModelSerializer):
         return validate_time_intervals(time_intervals)
 
     def validate_weight(self, value):
-        # todo: разобраться с валидацией веса. Почему-то не проходит, если вес = 0.01
-        min_weight, max_weight = 0.01, 50
-        if value < min_weight or value > max_weight:
+        min_weight, max_weight = 0.01, 50.0
+        if not (min_weight <= float(value) <= max_weight):
             raise ValidationError(f'Weight of the order must be within the limits of {min_weight} and {max_weight}')
         return value
 
