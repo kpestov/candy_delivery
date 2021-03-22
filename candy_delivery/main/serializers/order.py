@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import ValidationError
 
@@ -17,7 +18,7 @@ class OrderSerializer(base_serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ('order_id', 'weight', 'region', 'delivery_hours')
+        fields = ('order_id', 'weight', 'region', 'delivery_hours', 'courier_id')
 
     def validate_delivery_hours(self, time_intervals):
         return validate_time_intervals(time_intervals)
@@ -59,3 +60,22 @@ class OrderListSerializerOut(base_serializers.Serializer):
 
     class Meta:
         fields = ('id',)
+
+
+class OrdersAssignSerializer(base_serializers.ModelSerializer):
+    courier_id = serializers.IntegerField(required=True)
+
+    class Meta:
+        model = Order
+        fields = ('courier_id',)
+
+    def update(self, instances, validated_data):
+        assign_time = timezone.now()
+        courier_id = validated_data.get('courier_id')
+
+        with transaction.atomic():
+            for instance in instances:
+                instance.courier_id = courier_id
+                instance.assign_time = assign_time
+            Order.objects.bulk_update(instances, ['courier_id', 'assign_time'])
+        return instances

@@ -10,11 +10,11 @@ from .serializers.courier import (
 )
 from .serializers.order import (
     OrderSerializer, OrderListSerializer,
-    OrderListSerializerOut
+    OrderListSerializerOut, OrdersAssignSerializer
 )
 
-from .models import Courier
-from .utils import CreateViewMixin, get_object_or_400
+from .models import Courier, Order
+from .utils import CreateViewMixin
 
 
 class CouriersCreateView(CreateViewMixin, APIView):
@@ -47,8 +47,20 @@ class CourierUpdateView(GenericAPIView):
         )
 
 
-class OrdersAssignView(APIView):
+class OrdersAssignView(GenericAPIView):
+    serializer_class = OrdersAssignSerializer
+    queryset = Order
+
     def post(self, request):
-        courier_data = CourierSerializerIn(data=request.data).load()
-        courier = get_object_or_400(Courier, id=courier_data.get('courier_id'))
-        return Response({courier.pk})
+        orders = Order.objects.filter(id__in=[1, 2])
+
+        validated_courier_data = CourierSerializerIn(data=request.data).load()
+        courier_orders = Courier.get_suitable_orders(courier_id=validated_courier_data['courier_id'])
+
+        assigned_orders = self.get_serializer(orders, data=request.data, partial=True).load_and_save()
+
+        resp = {'orders': OrderListSerializerOut(assigned_orders, many=True).data}
+        if orders:
+            resp.update({'assign_time': orders[0].assign_time})
+
+        return Response(resp, status=status.HTTP_200_OK)

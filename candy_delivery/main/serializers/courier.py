@@ -1,5 +1,3 @@
-from itertools import chain
-
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework.validators import ValidationError
@@ -7,7 +5,7 @@ from rest_framework.validators import ValidationError
 from .. import base_serializers
 from ..serializers.region import RegionSerializer
 from ..models import Courier, CourierType, Region
-from ..utils import validate_time_intervals
+from ..utils import validate_time_intervals, get_object_or_400
 
 
 class CourierSerializerIn(base_serializers.Serializer):
@@ -15,6 +13,10 @@ class CourierSerializerIn(base_serializers.Serializer):
 
     class Meta:
         fields = ('courier_id',)
+
+    def validate(self, data):
+        get_object_or_400(Courier, id=data.get('courier_id'))
+        return data
 
 
 class CourierSerializer(base_serializers.ModelSerializer):

@@ -24,6 +24,10 @@ class Courier(models.Model):
     def __str__(self):
         return f'[pk: {self.pk}] [courier_type: {self.courier_type}] [working_hours: {self.working_hours}]'
 
+    @classmethod
+    def get_suitable_orders(cls, courier_id):
+        pass
+
 
 class Region(models.Model):
     """
