@@ -11,27 +11,25 @@ from .serializers.courier import (
 from .serializers.order import (
     OrderSerializer, OrderListSerializer, OrderListSerializerOut
 )
-from .exceptions import APIError
-from .utils import collect_invalid_objects
+
 from .models import Courier
+from .utils import CreateViewMixin
 
 
-class CourierCreateView(APIView):
-    def post(self, request):
-        invalid_couriers = collect_invalid_objects(request, CourierSerializer, obj_key='courier_id')
-        if invalid_couriers:
-            raise APIError(
-                objects_name='couriers',
-                invalid_objects=invalid_couriers
-            )
+class CourierCreateView(CreateViewMixin, APIView):
+    obj_key = 'courier_id'
+    objects_name = 'couriers'
+    serializer = CourierSerializer
+    serializer_list = CourierListSerializer
+    serializer_out = CourierListSerializerOut
 
-        created_couriers = CourierListSerializer(data=request.data).load_and_save()
-        return Response(
-            {
-                'couriers': CourierListSerializerOut(created_couriers, many=True).data
-            },
-            status=status.HTTP_201_CREATED
-        )
+
+class OrderCreateView(CreateViewMixin, APIView):
+    obj_key = 'order_id'
+    objects_name = 'orders'
+    serializer = OrderSerializer
+    serializer_list = OrderListSerializer
+    serializer_out = OrderListSerializerOut
 
 
 class CourierUpdateView(GenericAPIView):
@@ -45,23 +43,4 @@ class CourierUpdateView(GenericAPIView):
         return Response(
                 CourierSerializerOut(updated_courier).data,
                 status=status.HTTP_200_OK
-        )
-
-
-class OrderCreateView(APIView):
-    # todo: Сделать миксин из OrderCreateView и CourierCreateView, чтобы не было дублирования кода
-    def post(self, request):
-        invalid_orders = collect_invalid_objects(request, OrderSerializer, obj_key='order_id')
-        if invalid_orders:
-            raise APIError(
-                objects_name='orders',
-                invalid_objects=invalid_orders
-            )
-
-        created_orders = OrderListSerializer(data=request.data).load_and_save()
-        return Response(
-            {
-                'orders': OrderListSerializerOut(created_orders, many=True).data
-            },
-            status=status.HTTP_201_CREATED
         )

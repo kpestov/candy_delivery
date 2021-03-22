@@ -1,4 +1,3 @@
-from itertools import chain
 from typing import Iterable
 
 from rest_framework import serializers

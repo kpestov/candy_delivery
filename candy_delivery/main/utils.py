@@ -1,6 +1,10 @@
 from datetime import datetime
 
 from rest_framework.validators import ValidationError
+from rest_framework.response import Response
+from rest_framework import status
+
+from .exceptions import APIError
 
 
 def collect_invalid_objects(request, serializer_cls, obj_key: str):
@@ -24,3 +28,27 @@ def validate_time_intervals(time_intervals):
         except ValueError:
             raise ValidationError('Invalid input working hours')
     return time_intervals
+
+
+class CreateViewMixin:
+    obj_key = None
+    objects_name = None
+    serializer = None
+    serializer_list = None
+    serializer_out = None
+
+    def post(self, request):
+        invalid_objects = collect_invalid_objects(request, self.serializer, obj_key=self.obj_key)
+        if invalid_objects:
+            raise APIError(
+                objects_name=self.objects_name,
+                invalid_objects=invalid_objects
+            )
+
+        created_objects = self.serializer_list(data=request.data).load_and_save()
+        return Response(
+            {
+                self.objects_name: self.serializer_out(created_objects, many=True).data
+            },
+            status=status.HTTP_201_CREATED
+        )
