@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.views import APIView
@@ -52,15 +53,17 @@ class OrdersAssignView(GenericAPIView):
     queryset = Order
 
     def post(self, request):
-        orders = Order.objects.filter(id__in=[1, 2])
-
         validated_courier_data = CourierSerializerIn(data=request.data).load()
-        courier_orders = Courier.get_suitable_orders(courier_id=validated_courier_data['courier_id'])
+        courier_orders = (
+            Courier.objects
+            .get(id=validated_courier_data['courier_id'])
+            .get_suitable_orders(today=timezone.now())
+        )
 
-        assigned_orders = self.get_serializer(orders, data=request.data, partial=True).load_and_save()
+        assigned_orders = self.get_serializer(courier_orders, data=request.data, partial=True).load_and_save()
 
         resp = {'orders': OrderListSerializerOut(assigned_orders, many=True).data}
-        if orders:
-            resp.update({'assign_time': orders[0].assign_time})
+        if courier_orders:
+            resp.update({'assign_time': courier_orders[-1].assign_time})
 
         return Response(resp, status=status.HTTP_200_OK)

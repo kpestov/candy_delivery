@@ -38,6 +38,33 @@ def validate_time_intervals(time_intervals):
     return time_intervals
 
 
+def cast_hours_to_objects(inst, attr_name, to_obj, today):
+    casted_hours = []
+    time_format = '%H:%M'
+    for time_interval in getattr(inst, attr_name):
+        start, end = time_interval.split('-')
+        start, end = datetime.strptime(start, time_format), datetime.strptime(end, time_format)
+        casted_hours.append(
+            to_obj(
+                start=today.replace(
+                    hour=start.hour, minute=start.minute, second=0, microsecond=0
+                ),
+                end=today.replace(
+                    hour=end.hour, minute=end.minute, second=0, microsecond=0
+                )
+            )
+        )
+    setattr(inst, attr_name, sorted(casted_hours, key=lambda x: x.start))
+
+
+def remove_time_intervals_over_current_time(inst, attr_time_interval: str, today):
+    valid_time_intervals = [
+        time_interval for time_interval in getattr(inst, attr_time_interval)
+        if time_interval.end.time() > today.time()
+    ]
+    setattr(inst, attr_time_interval, valid_time_intervals)
+
+
 class CreateViewMixin:
     obj_key = None
     objects_name = None
