@@ -22,8 +22,8 @@ class CourierSerializerIn(base_serializers.Serializer):
 class CourierSerializer(base_serializers.ModelSerializer):
     courier_id = serializers.IntegerField(source='id', required=True)
     courier_type = serializers.ChoiceField(required=True, choices=[field.name for field in CourierType])
-    regions = base_serializers.UintListField(min_length=1, default=list)
-    working_hours = base_serializers.StringListField(default=list)
+    regions = base_serializers.UintListField(min_length=1, required=True)
+    working_hours = base_serializers.StringListField(required=True)
 
     class Meta:
         model = Courier

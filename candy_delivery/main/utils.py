@@ -12,7 +12,7 @@ def get_object_or_400(klass, *args, **kwargs):
     try:
         obj = klass.objects.get(*args, **kwargs)
     except klass.DoesNotExist:
-        raise Http400()
+        raise Http400(details=f'{klass.__name__} does not exist')
     return obj
 
 
@@ -90,14 +90,15 @@ class CreateViewMixin:
     serializer_out = None
 
     def post(self, request):
-        invalid_objects = collect_invalid_objects(request, self.serializer, obj_key=self.obj_key)
-        if invalid_objects:
+        try:
+            created_objects = self.serializer_list(data=request.data).load_and_save()
+        except ValidationError as e:
             raise APIError(
                 objects_name=self.objects_name,
-                invalid_objects=invalid_objects
+                invalid_objects=collect_invalid_objects(request, self.serializer, obj_key=self.obj_key),
+                details=e.get_full_details()
             )
 
-        created_objects = self.serializer_list(data=request.data).load_and_save()
         return Response(
             {
                 self.objects_name: self.serializer_out(created_objects, many=True).data

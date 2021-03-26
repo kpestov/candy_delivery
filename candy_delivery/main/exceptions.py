@@ -1,5 +1,4 @@
 import logging
-
 import rest_framework.views
 from rest_framework import status
 from rest_framework.exceptions import APIException
@@ -13,10 +12,11 @@ class APIError(APIException):
     default_detail = 'Некорректный запрос'
     default_code = 'invalid'
 
-    def __init__(self, objects_name=None, invalid_objects=None, detail=None, status_code=None, **kwargs):
+    def __init__(self, objects_name=None, invalid_objects=None, detail=None, status_code=None, details=None, **kwargs):
         super().__init__(detail=detail, **kwargs)
         self.invalid_objects = invalid_objects
         self.objects_name = objects_name
+        self.details = details
 
         if status_code is not None:
             self.status_code = status_code
@@ -39,8 +39,10 @@ def exception_handler(exc, context):
     if isinstance(exc, APIError):
         response.data.pop('detail')
         response.data['validation_error'] = {exc.objects_name: exc.invalid_objects}
+        response.data['details'] = exc.details
 
     if isinstance(exc, Http400):
         response.data.pop('validation_error')
+        response.data['details'] = exc.details
 
     return response

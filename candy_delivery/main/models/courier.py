@@ -129,7 +129,7 @@ class Courier(models.Model):
         return (
             Order.objects
             .filter(region_id__in=Subquery(self.regions.values('id')))
-            .filter(weight__lte=self.max_weignt)
+            .filter(weight__lte=self.max_weight)
             .filter(courier_id__isnull=True)
             .filter(complete_time__isnull=True)
             .filter(assign_time__isnull=True)

@@ -18,7 +18,7 @@ from .serializers.order import (
     OrderCompleteSerializer, OrderArgsSerializer
 )
 from .models import Courier, Order
-from .utils import CreateViewMixin
+from .utils import CreateViewMixin, get_object_or_400
 
 
 class CouriersCreateView(CreateViewMixin, APIView):
@@ -36,7 +36,7 @@ class CourierView(GenericAPIView):
     queryset = Courier
 
     def get(self, request, courier_id):
-        courier = get_object_or_404(Courier, id=courier_id)
+        courier = get_object_or_400(Courier, id=courier_id)
         courier_info = CourierSerializerOut(courier).data
 
         if courier.has_completed_orders:

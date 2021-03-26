@@ -22,10 +22,11 @@ class OrderQuerySet(models.QuerySet):
         if queryset_len == 1:
             return queryset[0]
         elif queryset_len == 0:
-            raise Http400
+            raise Http400(details='Order does not exist')
         else:
-            logger.error('Multiple rows were found for one_or_400()')
-            raise Http400
+            msg = 'Multiple rows were found for one_or_400()'
+            logger.error(msg)
+            raise Http400(details=msg)
 
 
 class Order(models.Model):
