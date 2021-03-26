@@ -9,6 +9,7 @@ from django.db.models import Subquery
 
 from datetimerange import DateTimeRange
 
+from .exceptions import Http400
 from .utils import cast_hours_to_objects, remove_time_intervals_over_current_time
 
 
@@ -96,7 +97,7 @@ class Courier(models.Model):
         ]
 
         grouped_orders = self._group_orders_by_region(filtered_orders)
-        self.add_order_to_courier(grouped_orders, result, today)
+        self.add_order(grouped_orders, result, today)
 
         return result
 
@@ -108,7 +109,8 @@ class Courier(models.Model):
             .filter(complete_time__isnull=True)
         )
 
-    def add_order_to_courier(self, grouped_orders, couriers_orders, today):
+    def add_order(self, grouped_orders, couriers_orders, today):
+        # todo: сделать так, чтобы в метод попадал только объект заказа и все!
         current_load = 0
         current_assigned_orders = self.get_current_assigned_orders()
         if current_assigned_orders:
@@ -146,6 +148,20 @@ class Region(models.Model):
             cls.objects.bulk_create([Region(id=region_id) for region_id in regions_to_write])
 
 
+class OrderQuerySet(models.QuerySet):
+    def one_or_400(self):
+        queryset = list(self)
+        queryset_len = len(queryset)
+
+        if queryset_len == 1:
+            return queryset[0]
+        elif queryset_len == 0:
+            raise Http400
+        else:
+            raise Http400
+            # todo: logger "Multiple rows were found for one_or_none()"
+
+
 class Order(models.Model):
     """
     Модель заказа
@@ -157,13 +173,16 @@ class Order(models.Model):
         complete_time - время выполнения заказа
         delivery_hours - временные промежутки, в которые клиенту удобно принять заказ (массив строк: [HH:MM-HH:MM, ...])
     """
-
+    # todo: сделать проверку на уровне базы и на уровне сериализации то, чтобы assign_time было < complete_time
+    # todo: не забыть сделать join во всех запросах, чтобы не дублировать запросы к базе
     weight = models.DecimalField(max_digits=4, decimal_places=2)
     region = models.ForeignKey(Region, related_name='orders', on_delete=models.SET_NULL, null=True)
     courier = models.ForeignKey(Courier, related_name='orders', on_delete=models.SET_NULL, null=True)
     assign_time = models.DateTimeField(null=True)
     complete_time = models.DateTimeField(null=True)
     delivery_hours = ArrayField(models.CharField(max_length=11), blank=False, default=list)
+
+    objects = OrderQuerySet.as_manager()
 
     def __str__(self):
         return f'[pk: {self.pk}] [region: {self.region}] [courier: {self.courier}]'

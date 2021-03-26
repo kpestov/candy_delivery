@@ -2,6 +2,7 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.validators import ValidationError
 
+from .courier import CourierSerializerIn
 from .region import RegionSerializer
 from .. import base_serializers
 
@@ -76,3 +77,24 @@ class OrdersAssignSerializer(base_serializers.ModelSerializer):
                 instance.courier_id = courier_id
             Order.objects.bulk_update(instances, ['courier_id', 'assign_time'])
         return instances
+
+
+class OrderCompleteSerializer(base_serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ('complete_time',)
+
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            instance.complete_time = validated_data.get('complete_time')
+            instance.save()
+        return instance
+
+
+class OrderArgsSerializer(base_serializers.Serializer):
+    courier_id = serializers.IntegerField(required=True)
+    order_id = serializers.IntegerField(required=True)
+    complete_time = serializers.DateTimeField(required=True)
+
+    class Meta:
+        fields = ('courier_id', 'order_id', 'complete_time')

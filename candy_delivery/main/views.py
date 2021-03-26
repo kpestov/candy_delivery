@@ -1,3 +1,5 @@
+from typing import Type
+
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -5,13 +7,16 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
+from . import base_serializers
+from .exceptions import Http400
 from .serializers.courier import (
     CourierListSerializer, CourierListSerializerOut, CourierSerializer,
     UpdateCourierArgsSerializer, CourierSerializerOut, CourierSerializerIn
 )
 from .serializers.order import (
     OrderSerializer, OrderListSerializer,
-    OrderListSerializerOut, OrdersAssignSerializer
+    OrderListSerializerOut, OrdersAssignSerializer,
+    OrderCompleteSerializer, OrderArgsSerializer
 )
 
 from .models import Courier, Order
@@ -67,3 +72,37 @@ class OrdersAssignView(GenericAPIView):
             resp.update({'assign_time': courier_orders[-1].assign_time})
 
         return Response(resp, status=status.HTTP_200_OK)
+
+
+class OrdersCompleteView(GenericAPIView):
+    serializer_class = OrderCompleteSerializer
+    queryset = Order
+
+    @staticmethod
+    def get_and_validate_order(
+            request,
+            lookup_serializer: Type[base_serializers.Serializer] = OrderArgsSerializer
+    ):
+        lookup = lookup_serializer(data=request.data).load()
+        complete_time = lookup.get('complete_time')
+
+        order = (
+            Order.objects
+            .filter(id=lookup.get('order_id'))
+            .filter(courier_id=lookup.get('courier_id'))
+            .filter(complete_time__isnull=True)
+            .filter(assign_time__isnull=False)
+        ).one_or_400()
+
+        if complete_time <= order.assign_time:
+            raise Http400
+        return order
+
+    def post(self, request):
+        instance = self.get_and_validate_order(request)
+        completed_order = self.get_serializer(instance, data=request.data, partial=True).load_and_save()
+
+        return Response(
+            {'order_id': completed_order.pk},
+            status=status.HTTP_200_OK
+        )
