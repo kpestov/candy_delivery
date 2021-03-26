@@ -2,6 +2,7 @@ import enum
 
 from collections import namedtuple
 from itertools import groupby
+import operator
 
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
@@ -18,6 +19,13 @@ class CourierType(enum.IntEnum):
     foot = 10
     bike = 15
     car = 50
+
+
+@enum.unique
+class CourierEarningCoefficient(enum.IntEnum):
+    foot = 2
+    bike = 5
+    car = 9
 
 
 OrderDeliveryHours = namedtuple('OrderDeliveryHours', 'start end')
@@ -42,11 +50,43 @@ class Courier(models.Model):
 
     @property
     def rating(self):
-        return
+        min_average_time_by_regions = min(self.get_average_delivery_times_by_region())
+        result = (60 * 60 - min(min_average_time_by_regions, 60 * 60)) / (60 * 60) * 5
+        return round(result, 2)
 
     @property
     def earnings(self):
-        return
+        self.get_completed_orders().count()
+        return 500 * self.get_completed_orders().count() * getattr(CourierEarningCoefficient, self.courier_type)
+
+    @staticmethod
+    def get_orders_delivery_times(orders):
+        complete_times = [
+            order.complete_time
+            for order in sorted(orders, key=lambda x: x.complete_time, reverse=True)
+        ]
+        # добавляем время назначения первого заказа
+        complete_times.append(orders[-1].assign_time)
+
+        return [
+            delivery_time.total_seconds()
+            for delivery_time in map(
+                lambda x: operator.sub(*x),
+                zip(complete_times[:-1], complete_times[1:])
+            )
+        ]
+
+    def get_average_delivery_times_by_region(self):
+        result = []
+        orders_by_region = self._group_orders_by_region(
+            data=self.get_completed_orders()
+        )
+        for _, orders in orders_by_region.items():
+            orders_delivery_times = self.get_orders_delivery_times(orders)
+            result.append(
+                    sum(orders_delivery_times)/len(orders_delivery_times)
+            )
+        return result
 
     @property
     def max_load(self):
@@ -61,7 +101,7 @@ class Courier(models.Model):
         groped_orders = {}
         data = sorted(data, key=key_func)
         for key, group in groupby(data, key_func):
-            groped_orders[key] = sorted(list(group), key=lambda x: (x.weight, x.delivery_hours[0].end))
+            groped_orders[key] = list(group)
         return groped_orders
 
     def _get_ini_orders(self):
@@ -87,7 +127,7 @@ class Courier(models.Model):
         return False
 
     def get_suitable_orders(self, today):
-        result = list(self.get_current_assigned_orders().all())
+        result = list(self.get_assigned_orders().all())
         if not self.working_hours:
             return result
 
@@ -111,25 +151,38 @@ class Courier(models.Model):
 
         return result
 
-    def get_current_assigned_orders(self):
+    def get_assigned_orders(self):
+        # todo: переписать с использованием менеджера objects
         return (
-            Order.objects
-            .filter(courier_id=self.pk)
+            self.orders
             .filter(assign_time__isnull=False)
             .filter(complete_time__isnull=True)
+        )
+
+    @property
+    def has_completed_orders(self):
+        return True if self.get_completed_orders() else False
+
+    def get_completed_orders(self):
+        # todo: переписать с использованием менеджера objects
+        return (
+            self.orders
+            .filter(assign_time__isnull=False)
+            .filter(complete_time__isnull=False)
         )
 
     def add_order(self, grouped_orders, couriers_orders, today):
         # todo: сделать так, чтобы в метод попадал только объект заказа и все!
         current_load = 0
-        current_assigned_orders = self.get_current_assigned_orders()
+        current_assigned_orders = self.get_assigned_orders()
         if current_assigned_orders:
             current_load = sum([order.weight for order in current_assigned_orders])
 
         space_left = self.max_load - current_load
 
         for _, orders in grouped_orders.items():
-            for order in orders:
+            # for order in orders:
+            for order in sorted(orders, key=lambda x: (x.weight, x.delivery_hours[0].end)):
                 if space_left:
                     if self._is_working_hours_overlap(order.delivery_hours) and order.weight <= space_left:
                         couriers_orders.append(order)
@@ -183,7 +236,7 @@ class Order(models.Model):
         complete_time - время выполнения заказа
         delivery_hours - временные промежутки, в которые клиенту удобно принять заказ (массив строк: [HH:MM-HH:MM, ...])
     """
-    # todo: сделать проверку на уровне базы и на уровне сериализации то, чтобы assign_time было < complete_time
+    # todo: сделать проверку на уровне базы, чтобы assign_time было < complete_time
     # todo: не забыть сделать join во всех запросах, чтобы не дублировать запросы к базе
     weight = models.DecimalField(max_digits=4, decimal_places=2)
     region = models.ForeignKey(Region, related_name='orders', on_delete=models.SET_NULL, null=True)
