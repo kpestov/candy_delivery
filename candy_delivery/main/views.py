@@ -8,7 +8,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from . import base_serializers
-from .exceptions import Http400
 from .serializers.courier import (
     CourierListSerializer, CourierListSerializerOut, CourierSerializer,
     UpdateCourierArgsSerializer, CourierSerializerOut, CourierSerializerIn
@@ -97,19 +96,14 @@ class OrdersCompleteView(GenericAPIView):
             lookup_serializer: Type[base_serializers.Serializer] = OrderArgsSerializer
     ):
         lookup = lookup_serializer(data=request.data).load()
-        complete_time = lookup.get('complete_time')
 
-        order = (
+        return (
             Order.objects
             .filter(id=lookup.get('order_id'))
             .filter(courier_id=lookup.get('courier_id'))
             .filter(complete_time__isnull=True)
             .filter(assign_time__isnull=False)
         ).one_or_400()
-
-        if complete_time <= order.assign_time:
-            raise Http400
-        return order
 
     def post(self, request):
         instance = self.get_and_validate_order(request)

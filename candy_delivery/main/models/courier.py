@@ -1,4 +1,4 @@
-import enum
+import logging
 
 from collections import namedtuple
 from itertools import groupby
@@ -10,28 +10,23 @@ from django.db.models import Subquery
 
 from datetimerange import DateTimeRange
 
-from .exceptions import Http400
-from .utils import cast_hours_to_objects, remove_time_intervals_over_current_time
+from ..exceptions import Http400
+from ..utils import (
+    cast_hours_to_objects, remove_time_intervals_over_current_time
+)
+from .enums import (
+    CourierEarningCoefficient, CourierType
+)
+from .order import Order
+
+logger = logging.getLogger(__name__)
 
 
-@enum.unique
-class CourierType(enum.IntEnum):
-    foot = 10
-    bike = 15
-    car = 50
-
-
-@enum.unique
-class CourierEarningCoefficient(enum.IntEnum):
-    foot = 2
-    bike = 5
-    car = 9
+__all__ = ['Courier', 'Region']
 
 
 OrderDeliveryHours = namedtuple('OrderDeliveryHours', 'start end')
 CourierWorkingHours = namedtuple('CourierWorkingHours', 'start end')
-
-# todo: проверить везьде, чтобы расчет чисел был в decimal, либо во float
 
 
 class Courier(models.Model):
@@ -148,11 +143,9 @@ class Courier(models.Model):
 
         grouped_orders = self._group_orders_by_region(filtered_orders)
         self.add_order(grouped_orders, result, today)
-
         return result
 
     def get_assigned_orders(self):
-        # todo: переписать с использованием менеджера objects
         return (
             self.orders
             .filter(assign_time__isnull=False)
@@ -164,7 +157,6 @@ class Courier(models.Model):
         return True if self.get_completed_orders() else False
 
     def get_completed_orders(self):
-        # todo: переписать с использованием менеджера objects
         return (
             self.orders
             .filter(assign_time__isnull=False)
@@ -181,7 +173,6 @@ class Courier(models.Model):
         space_left = self.max_load - current_load
 
         for _, orders in grouped_orders.items():
-            # for order in orders:
             for order in sorted(orders, key=lambda x: (x.weight, x.delivery_hours[0].end)):
                 if space_left:
                     if self._is_working_hours_overlap(order.delivery_hours) and order.weight <= space_left:
@@ -221,35 +212,5 @@ class OrderQuerySet(models.QuerySet):
         elif queryset_len == 0:
             raise Http400
         else:
+            logger.error('Multiple rows were found for one_or_400()')
             raise Http400
-            # todo: logger "Multiple rows were found for one_or_none()"
-
-
-class Order(models.Model):
-    """
-    Модель заказа
-    Attributes:
-        weight - вес заказа в кг. Ограничения по весу: 0.01 <= weight <= 50
-        region - район, в который необходимо доставить заказ
-        courier - курьер, который должен доставить заказ
-        assign_time - время назначения заказа
-        complete_time - время выполнения заказа
-        delivery_hours - временные промежутки, в которые клиенту удобно принять заказ (массив строк: [HH:MM-HH:MM, ...])
-    """
-    # todo: сделать проверку на уровне базы, чтобы assign_time было < complete_time
-    # todo: не забыть сделать join во всех запросах, чтобы не дублировать запросы к базе
-    weight = models.DecimalField(max_digits=4, decimal_places=2)
-    region = models.ForeignKey(Region, related_name='orders', on_delete=models.SET_NULL, null=True)
-    courier = models.ForeignKey(Courier, related_name='orders', on_delete=models.SET_NULL, null=True)
-    assign_time = models.DateTimeField(null=True)
-    complete_time = models.DateTimeField(null=True)
-    delivery_hours = ArrayField(models.CharField(max_length=11), blank=False, default=list)
-
-    objects = OrderQuerySet.as_manager()
-
-    def __str__(self):
-        return f'[pk: {self.pk}] [region: {self.region}] [courier: {self.courier}]'
-
-    def is_possible_to_deliver(self, today):
-        remove_time_intervals_over_current_time(self, 'delivery_hours', today=today)
-        return True if self.delivery_hours else False
