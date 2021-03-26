@@ -22,6 +22,7 @@ from .utils import CreateViewMixin
 
 
 class CouriersCreateView(CreateViewMixin, APIView):
+    """View для загрузки курьеров в базу"""
     obj_key = 'courier_id'
     objects_name = 'couriers'
     serializer = CourierSerializer
@@ -30,6 +31,7 @@ class CouriersCreateView(CreateViewMixin, APIView):
 
 
 class CourierView(GenericAPIView):
+    """View для получения информации о курьере и доп. статистики, а также для обновления атрибутов курьера"""
     serializer_class = UpdateCourierArgsSerializer
     queryset = Courier
 
@@ -58,6 +60,7 @@ class CourierView(GenericAPIView):
 
 
 class OrdersCreateView(CreateViewMixin, APIView):
+    """View для создания заказов"""
     obj_key = 'order_id'
     objects_name = 'orders'
     serializer = OrderSerializer
@@ -66,6 +69,7 @@ class OrdersCreateView(CreateViewMixin, APIView):
 
 
 class OrdersAssignView(GenericAPIView):
+    """View для назначения курьеру максимального количества заказов, подходящих по весу, району и графику работы"""
     serializer_class = OrdersAssignSerializer
     queryset = Order
 
@@ -87,6 +91,7 @@ class OrdersAssignView(GenericAPIView):
 
 
 class OrdersCompleteView(GenericAPIView):
+    """View отмечает заказ выполненным"""
     serializer_class = OrderCompleteSerializer
     queryset = Order
 

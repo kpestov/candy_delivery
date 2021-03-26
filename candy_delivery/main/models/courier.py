@@ -1,8 +1,12 @@
 import logging
+import operator
 
 from collections import namedtuple
 from itertools import groupby
-import operator
+from typing import (
+    Iterable, List, Dict
+)
+from datetime import datetime
 
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
@@ -10,7 +14,6 @@ from django.db.models import Subquery
 
 from datetimerange import DateTimeRange
 
-from ..exceptions import Http400
 from ..utils import (
     cast_hours_to_objects, remove_time_intervals_over_current_time
 )
@@ -22,7 +25,7 @@ from .order import Order
 logger = logging.getLogger(__name__)
 
 
-__all__ = ['Courier', 'Region']
+__all__ = ['Courier', 'Region', 'OrderDeliveryHours', 'CourierWorkingHours']
 
 
 OrderDeliveryHours = namedtuple('OrderDeliveryHours', 'start end')
@@ -36,7 +39,6 @@ class Courier(models.Model):
         courier_type - тип курьера. Возможные значения: foot, bike, car
         working_hours  - график работы курьера (массив строк: [HH:MM-HH:MM, ...])
     """
-
     courier_type = models.CharField(max_length=4)
     working_hours = ArrayField(models.CharField(max_length=11), blank=True, default=list)
 
@@ -44,18 +46,37 @@ class Courier(models.Model):
         return f'[pk: {self.pk}] [courier_type: {self.courier_type}] [working_hours: {self.working_hours}]'
 
     @property
-    def rating(self):
+    def rating(self) -> float:
+        """
+        Рассчитывает рейтинг курьера.
+        Рейтинг рассчитывается следующим образом:
+        (60*60 - min(t, 60*60))/(60*60) * 5,
+        где t - минимальное из средних времен доставки по районам (в секундах), t = min(td[1], td[2], ..., td[n])
+        td[i] - среднее время доставки заказов по району i (в секундах)
+        """
         min_average_time_by_regions = min(self.get_average_delivery_times_by_region())
         result = (60 * 60 - min(min_average_time_by_regions, 60 * 60)) / (60 * 60) * 5
         return round(result, 2)
 
     @property
-    def earnings(self):
+    def earnings(self) -> int:
+        """
+        Рассчитывает заработок курьера.
+        Заработок рассчитывается как сумма оплаты за каждый завершенный развоз:
+        sum = ∑(500 * C) ,
+        C — коэффициент, зависящий от типа курьера (пеший — 2, велокурьер — 5, авто — 9) на момент формирования развоза
+        """
         self.get_completed_orders().count()
         return 500 * self.get_completed_orders().count() * getattr(CourierEarningCoefficient, self.courier_type)
 
     @staticmethod
-    def get_orders_delivery_times(orders):
+    def get_orders_delivery_times(orders: Iterable['Order']) -> List[float]:
+        """
+        Рассчитывает вреия доставки всех заказов курьера.
+        Время доставки одного заказа определяется как разница между временем окончания этого заказа
+        и временем окончания предыдущего заказа
+        (или временем назначения заказов, если вычисляется время для первого заказа)
+        """
         complete_times = [
             order.complete_time
             for order in sorted(orders, key=lambda x: x.complete_time, reverse=True)
@@ -71,7 +92,8 @@ class Courier(models.Model):
             )
         ]
 
-    def get_average_delivery_times_by_region(self):
+    def get_average_delivery_times_by_region(self) -> List[float]:
+        """Рассчитывает среднее время доставки (в секундах) заказов по всем районам, в которых работает курьер"""
         result = []
         orders_by_region = self._group_orders_by_region(
             data=self.get_completed_orders()
@@ -84,44 +106,53 @@ class Courier(models.Model):
         return result
 
     @property
-    def max_load(self):
+    def max_weight(self) -> int:
+        """Максимальный вес, который может унести курьер"""
         return getattr(CourierType, self.courier_type).value
 
-    def has_valid_working_hours(self, today):
+    def has_valid_working_hours(self, today: datetime) -> bool:
+        """Проверяет, может ли курьер в принципе выйти на работу"""
         remove_time_intervals_over_current_time(self, 'working_hours', today=today)
         return True if self.working_hours else False
 
     @staticmethod
-    def _group_orders_by_region(data, key_func=lambda x: x.region_id):
+    def _group_orders_by_region(data: Iterable['Order'], key_func=lambda x: x.region_id) -> Dict[int, List['Order']]:
+        """Выполняет группировку заказов курьера по районам"""
         groped_orders = {}
         data = sorted(data, key=key_func)
         for key, group in groupby(data, key_func):
             groped_orders[key] = list(group)
         return groped_orders
 
-    def _get_ini_orders(self):
+    def _get_ini_orders(self) -> Iterable['Order']:
+        """Получает начальные заказы для курьера, которые подходят по весу и району"""
         return (
             Order.objects
             .filter(region_id__in=Subquery(self.regions.values('id')))
-            .filter(weight__lte=self.max_load)
+            .filter(weight__lte=self.max_weignt)
             .filter(courier_id__isnull=True)
             .filter(complete_time__isnull=True)
             .filter(assign_time__isnull=True)
         )
 
-    def _is_working_hours_overlap(self, delivery_hours):
+    def _is_working_hours_overlap(self, delivery_hours: Iterable['OrderDeliveryHours']) -> bool:
+        """Проверяет пересечение рабочих часов курьера с часами доставки заказов"""
         for order_interval in delivery_hours:
             for courier_interval in self.working_hours:
                 courier_time = DateTimeRange(courier_interval.start, courier_interval.end)
                 order_time = DateTimeRange(order_interval.start, order_interval.end)
                 time_delta = courier_time.intersection(order_time)
 
+                # т.е.проверяем существует ли пересечение в принципе
                 if time_delta.is_valid_timerange():
+                    # подходит только, если промежутки пересекаются хотя бы на 1 секунду
+                    # например: {9:00-18:00} & {18:00-19:00} -> не подходит, {9:00-18:01} & {18:00-19:00} -> подходит
                     if time_delta.timedelta.seconds:
                         return True
         return False
 
-    def get_suitable_orders(self, today):
+    def get_suitable_orders(self, today: datetime) -> Iterable['Order']:
+        """Возвращает подходящие для курьера заказы в зависимости от веса, района и времени доставки"""
         result = list(self.get_assigned_orders().all())
         if not self.working_hours:
             return result
@@ -146,6 +177,7 @@ class Courier(models.Model):
         return result
 
     def get_assigned_orders(self):
+        """Возвращает заказы, которые были назначены курьеру"""
         return (
             self.orders
             .filter(assign_time__isnull=False)
@@ -153,24 +185,35 @@ class Courier(models.Model):
         )
 
     @property
-    def has_completed_orders(self):
+    def has_completed_orders(self) -> bool:
+        """Проверяет, есть ли у курьера хотя бы один завершенный заказ"""
         return True if self.get_completed_orders() else False
 
     def get_completed_orders(self):
+        """Возвращает завершенные заказы курьера"""
         return (
             self.orders
             .filter(assign_time__isnull=False)
             .filter(complete_time__isnull=False)
         )
 
-    def add_order(self, grouped_orders, couriers_orders, today):
+    def add_order(
+            self,
+            grouped_orders: Dict[int, List['Order']],
+            couriers_orders: List['Order'],
+            today: datetime
+    ) -> Iterable['Order']:
+        """
+        Добавляет заказы курьеру, пока у него есть свободное место.
+        Если места больше нет, то возвращается текущий набор заказов
+        """
         # todo: сделать так, чтобы в метод попадал только объект заказа и все!
-        current_load = 0
+        current_weight = 0
         current_assigned_orders = self.get_assigned_orders()
         if current_assigned_orders:
-            current_load = sum([order.weight for order in current_assigned_orders])
+            current_weight = sum([order.weight for order in current_assigned_orders])
 
-        space_left = self.max_load - current_load
+        space_left = self.max_weight - current_weight
 
         for _, orders in grouped_orders.items():
             for order in sorted(orders, key=lambda x: (x.weight, x.delivery_hours[0].end)):
@@ -196,21 +239,8 @@ class Region(models.Model):
 
     @classmethod
     def create_new_regions(cls, regions_to_add: set):
+        """Метод записывает в базу новые районы из json payload. Если такой район уже есть в базе, то он игнорируется"""
         regions_from_db = cls.objects.filter(id__in=regions_to_add).values_list('id', flat=True)
         if len(regions_to_add) != len(regions_from_db):
             regions_to_write = regions_to_add.difference(set(regions_from_db))
             cls.objects.bulk_create([Region(id=region_id) for region_id in regions_to_write])
-
-
-class OrderQuerySet(models.QuerySet):
-    def one_or_400(self):
-        queryset = list(self)
-        queryset_len = len(queryset)
-
-        if queryset_len == 1:
-            return queryset[0]
-        elif queryset_len == 0:
-            raise Http400
-        else:
-            logger.error('Multiple rows were found for one_or_400()')
-            raise Http400

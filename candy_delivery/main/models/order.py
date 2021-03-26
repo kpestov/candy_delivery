@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
@@ -13,6 +14,7 @@ __all__ = ['Order']
 
 
 class OrderQuerySet(models.QuerySet):
+    """Метод извлекает из базы одну запись. Если записей несколько или они отсутствуют, то кидается исключение"""
     def one_or_400(self):
         queryset = list(self)
         queryset_len = len(queryset)
@@ -37,7 +39,6 @@ class Order(models.Model):
         complete_time - время выполнения заказа
         delivery_hours - временные промежутки, в которые клиенту удобно принять заказ (массив строк: [HH:MM-HH:MM, ...])
     """
-
     weight = models.DecimalField(max_digits=4, decimal_places=2)
     region = models.ForeignKey('Region', related_name='orders', on_delete=models.SET_NULL, null=True)
     courier = models.ForeignKey('Courier', related_name='orders', on_delete=models.SET_NULL, null=True)
@@ -55,6 +56,10 @@ class Order(models.Model):
             raise APIError("complete_time can't be less than assign_time")
         super().save(*args, **kwargs)
 
-    def is_possible_to_deliver(self, today):
+    def is_possible_to_deliver(self, today: datetime) -> bool:
+        """
+        Проверяет, можно ли доставить заказ.
+        Т.е., если текущее время > времени окончания доставки, то заказ уже нельзя доставить
+        """
         remove_time_intervals_over_current_time(self, 'delivery_hours', today=today)
         return True if self.delivery_hours else False

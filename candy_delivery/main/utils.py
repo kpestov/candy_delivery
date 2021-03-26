@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import List
 
 from rest_framework.validators import ValidationError
 from rest_framework.response import Response
@@ -16,6 +17,10 @@ def get_object_or_400(klass, *args, **kwargs):
 
 
 def collect_invalid_objects(request, serializer_cls, obj_key: str):
+    """
+    Утилита для сбора объектов, которые не прошли валидацию.
+    Используется для отдачи в response body, когда кидается Http400
+    """
     invalid_objects = []
     for item in request.data.get('data'):
         serializer = serializer_cls(data=item)
@@ -24,7 +29,8 @@ def collect_invalid_objects(request, serializer_cls, obj_key: str):
     return invalid_objects
 
 
-def validate_time_intervals(time_intervals):
+def validate_time_intervals(time_intervals: List[str]):
+    """Валидация списка строковых временных интервалов, на соответствие формату: HH:MM-HH:MM"""
     valid_time_format = "%H:%M"
     for time_interval in time_intervals:
         try:
@@ -38,7 +44,17 @@ def validate_time_intervals(time_intervals):
     return time_intervals
 
 
-def cast_hours_to_objects(inst, attr_name, to_obj, today):
+def cast_hours_to_objects(
+        inst,
+        attr_name: str,
+        to_obj,
+        today: datetime
+):
+    """
+    Функция преобразует время из строки в объекты типа OrderDeliveryHours или CourierWorkingHours.
+    Благодаря данной функции удобно проводить пересечение дат у заказов и курьеров,
+    и тем самым подбирать подходящие для курьеров заказы.
+    """
     casted_hours = []
     time_format = '%H:%M'
     for time_interval in getattr(inst, attr_name):
@@ -58,6 +74,7 @@ def cast_hours_to_objects(inst, attr_name, to_obj, today):
 
 
 def remove_time_intervals_over_current_time(inst, attr_time_interval: str, today):
+    """Убирает временной промежуток, если время окончания (доставки зказа/работы курьера) < текущего времени"""
     valid_time_intervals = [
         time_interval for time_interval in getattr(inst, attr_time_interval)
         if time_interval.end.time() > today.time()
