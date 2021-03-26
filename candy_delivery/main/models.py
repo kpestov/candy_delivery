@@ -23,6 +23,8 @@ class CourierType(enum.IntEnum):
 OrderDeliveryHours = namedtuple('OrderDeliveryHours', 'start end')
 CourierWorkingHours = namedtuple('CourierWorkingHours', 'start end')
 
+# todo: проверить везьде, чтобы расчет чисел был в decimal, либо во float
+
 
 class Courier(models.Model):
     """
@@ -37,6 +39,14 @@ class Courier(models.Model):
 
     def __str__(self):
         return f'[pk: {self.pk}] [courier_type: {self.courier_type}] [working_hours: {self.working_hours}]'
+
+    @property
+    def rating(self):
+        return
+
+    @property
+    def earnings(self):
+        return
 
     @property
     def max_load(self):

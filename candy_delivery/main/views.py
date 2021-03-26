@@ -18,9 +18,8 @@ from .serializers.order import (
     OrderListSerializerOut, OrdersAssignSerializer,
     OrderCompleteSerializer, OrderArgsSerializer
 )
-
 from .models import Courier, Order
-from .utils import CreateViewMixin
+from .utils import CreateViewMixin, get_object_or_400
 
 
 class CouriersCreateView(CreateViewMixin, APIView):
@@ -31,17 +30,23 @@ class CouriersCreateView(CreateViewMixin, APIView):
     serializer_out = CourierListSerializerOut
 
 
-class OrdersCreateView(CreateViewMixin, APIView):
-    obj_key = 'order_id'
-    objects_name = 'orders'
-    serializer = OrderSerializer
-    serializer_list = OrderListSerializer
-    serializer_out = OrderListSerializerOut
-
-
-class CourierUpdateView(GenericAPIView):
+class CourierView(GenericAPIView):
     serializer_class = UpdateCourierArgsSerializer
     queryset = Courier
+
+    def get(self, request, courier_id):
+        courier = get_object_or_400(Courier, id=courier_id)
+        courier_info = CourierSerializerOut(courier).data
+
+        if courier.rating:
+            courier_info = {
+                **courier_info, 'rating': courier.rating, 'earnings': courier.earnings
+            }
+
+        return Response(
+            courier_info,
+            status=status.HTTP_200_OK
+        )
 
     def patch(self, request, courier_id):
         courier = get_object_or_404(self.queryset, pk=courier_id)
@@ -51,6 +56,14 @@ class CourierUpdateView(GenericAPIView):
                 CourierSerializerOut(updated_courier).data,
                 status=status.HTTP_200_OK
         )
+
+
+class OrdersCreateView(CreateViewMixin, APIView):
+    obj_key = 'order_id'
+    objects_name = 'orders'
+    serializer = OrderSerializer
+    serializer_list = OrderListSerializer
+    serializer_out = OrderListSerializerOut
 
 
 class OrdersAssignView(GenericAPIView):
