@@ -2,7 +2,6 @@ import pytest
 
 from app.main.utils import reverse
 
-
 pytestmark = [pytest.mark.django_db]
 
 
