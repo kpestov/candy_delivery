@@ -5,6 +5,8 @@ from .views import (
     OrdersAssignView, OrdersCompleteView, CourierView
 )
 
+app_name = 'main'
+
 urlpatterns = [
     path('couriers', CouriersCreateView.as_view(), name='couriers__create'),
     path('couriers/<int:courier_id>', CourierView.as_view(), name='courier'),
