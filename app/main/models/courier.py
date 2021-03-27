@@ -10,7 +10,7 @@ from datetime import datetime
 
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
-from django.db.models import Subquery
+from django.db.models import Subquery, Q
 
 from datetimerange import DateTimeRange
 
@@ -150,6 +150,34 @@ class Courier(models.Model):
                     if time_delta.timedelta.seconds:
                         return True
         return False
+
+    def get_orders_to_unassign(self, today: datetime) -> Iterable['Order']:
+        """Возвращает заказы, которые необходимо снять с курьера, вследствие изменения его атрибутов"""
+        result = []
+        current_assigned_orders = self.get_assigned_orders()
+        cast_hours_to_objects(self, 'working_hours', CourierWorkingHours, today)
+
+        if self.working_hours[-1].end.time() < today.time():
+            # т.е. рабочий день курьера уэе закончился
+            return current_assigned_orders.all()
+
+        orders_not_passed_by_weight = (
+            current_assigned_orders
+            .filter(weight__gt=self.max_weight)
+        )
+        result.extend(orders_not_passed_by_weight.all())
+
+        for order in current_assigned_orders.all():
+            # костыль, который связан с отсутствием поддержки not in lookup в django orm
+            if order.region_id not in self.regions.values_list('id', flat=True) and order not in result:
+                result.append(order)
+
+        if current_assigned_orders:
+            for order in current_assigned_orders.all():
+                cast_hours_to_objects(order, 'delivery_hours', OrderDeliveryHours, today)
+                if not self._is_working_hours_overlap(order.delivery_hours):
+                    result.append(order)
+        return result
 
     def get_suitable_orders(self, today: datetime) -> Iterable['Order']:
         """Возвращает подходящие для курьера заказы в зависимости от веса, района и времени доставки"""

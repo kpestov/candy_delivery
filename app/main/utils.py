@@ -48,6 +48,16 @@ def validate_time_intervals(time_intervals: List[str]):
     return time_intervals
 
 
+def cast_objects_to_hours(inst, attr_name):
+    """Функция преобразует время из объектов типа OrderDeliveryHours или CourierWorkingHours в строку HH:MM-HH:MM"""
+    time_format = '%H:%M'
+    casted_hours = []
+    for time_interval in getattr(inst, attr_name):
+        start, end = time_interval.start, time_interval.end
+        casted_hours.append(f'{start.strftime(time_format)}-{end.strftime(time_format)}')
+    setattr(inst, attr_name, casted_hours)
+
+
 def cast_hours_to_objects(
         inst,
         attr_name: str,

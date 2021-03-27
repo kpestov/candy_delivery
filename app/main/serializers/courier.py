@@ -1,11 +1,12 @@
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import ValidationError
 
 from .. import base_serializers
 from ..serializers.region import RegionSerializer
-from ..models import Courier, CourierType, Region
-from ..utils import validate_time_intervals, get_object_or_400
+from ..models import Courier, CourierType, Region, Order
+from ..utils import validate_time_intervals, get_object_or_400, cast_objects_to_hours
 
 
 class CourierSerializerIn(base_serializers.Serializer):
@@ -122,5 +123,13 @@ class UpdateCourierArgsSerializer(CourierSerializer):
                 instance.regions.through.objects.filter(region_id__in=regions_to_remove).delete()
 
             instance.save()
+
+            orders_to_unassign = instance.get_orders_to_unassign(today=timezone.now())
+            if orders_to_unassign:
+                for order_to_unassign in orders_to_unassign:
+                    order_to_unassign.courier_id, order_to_unassign.assign_time = None, None
+                Order.objects.bulk_update(orders_to_unassign, ['courier_id', 'assign_time'])
+
+            cast_objects_to_hours(instance, 'working_hours')
 
         return instance
