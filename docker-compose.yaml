@@ -3,6 +3,7 @@ version: '3.7'
 services:
   candy_delivery:
     build: ./
+    restart: always
     command: gunicorn -c gunicorn.conf --preload app.candy_delivery.wsgi
     expose:
       - 7777
@@ -12,10 +13,12 @@ services:
       - candy_delivery_db
   candy_delivery_db:
     image: postgres:12.0-alpine
+    restart: always
     env_file:
       - ./.env
   nginx:
     build: ./nginx
+    restart: always
     ports:
       - 8080:80
     depends_on:
