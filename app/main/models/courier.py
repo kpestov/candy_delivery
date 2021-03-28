@@ -10,7 +10,7 @@ from datetime import datetime
 
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
-from django.db.models import Subquery, Q
+from django.db.models import Subquery
 
 from datetimerange import DateTimeRange
 
