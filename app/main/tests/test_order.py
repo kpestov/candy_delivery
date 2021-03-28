@@ -91,3 +91,58 @@ def test_orders_create_failed_properly_collect_invalid_items(api_client):
     resp = api_client.post(reverse('main:orders__create'), invalid_payload)
     assert resp.data.get('validation_error') == {"orders": [{"id": 1}, {"id": 2}]}
     assert resp.status_code == 400
+
+
+def test_orders_assign_not_found_suitable_orders(api_client):
+    payload_to_create_courier = {
+        "data": [
+            {
+                "courier_id": 1,
+                "courier_type": "foot",
+                "regions": [1, 12, 22],
+                "working_hours": ["11:35-14:05", "09:00-18:00"]
+            },
+        ]
+    }
+    payload_to_create_orders = {
+        "data": [
+            {
+                "order_id": 1,
+                "weight": 0.23,
+                "region": 7,
+                "delivery_hours": ["09:00-23:00"]
+            }
+        ]
+    }
+    api_client.post(reverse('main:couriers__create'), payload_to_create_courier)
+    api_client.post(reverse('main:orders__create'), payload_to_create_orders)
+    resp = api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
+    assert resp.status_code == 200
+    assert resp.data == {"orders": []}
+
+
+def test_orders_assign_not_found_courier(api_client):
+    payload_to_create_courier = {
+        "data": [
+            {
+                "courier_id": 2,
+                "courier_type": "foot",
+                "regions": [1, 12, 22],
+                "working_hours": ["11:35-14:05", "09:00-18:00"]
+            },
+        ]
+    }
+    payload_to_create_orders = {
+        "data": [
+            {
+                "order_id": 7,
+                "weight": 0.23,
+                "region": 7,
+                "delivery_hours": ["09:00-23:00"]
+            }
+        ]
+    }
+    api_client.post(reverse('main:couriers__create'), payload_to_create_courier)
+    api_client.post(reverse('main:orders__create'), payload_to_create_orders)
+    resp = api_client.post(reverse('main:orders_assign'), {'courier_id': 8})
+    assert resp.status_code == 400
