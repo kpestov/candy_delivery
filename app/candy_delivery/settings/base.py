@@ -134,17 +134,13 @@ REST_FRAMEWORK = {
 
 LANGUAGE_CODE = 'en-us'
 
-# todo: вернуть на UTC перед деплоем
-TIME_ZONE = 'Asia/Yekaterinburg'
-# TIME_ZONE = 'Europe/London'
-# TIME_ZONE = 'UTC'
+TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
 USE_L10N = True
 
-# todo: раскомментить перед деплоем
-# USE_TZ = True
+USE_TZ = True
 
 
 # Static files (CSS, JavaScript, Images)

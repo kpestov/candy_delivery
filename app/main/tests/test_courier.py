@@ -1,34 +1,15 @@
+from unittest.mock import patch
+
 import pytest
 
+from app.main.tests.test_order import CURRENT_DATE, COMPLETE_TIME
 from app.main.utils import reverse
 
 pytestmark = [pytest.mark.django_db]
 
 
-def test_couriers_create_successful(api_client):
-    payload = {
-        "data": [
-            {
-                "courier_id": 1,
-                "courier_type": "foot",
-                "regions": [1, 12, 22],
-                "working_hours": ["11:35-14:05", "09:00-11:00"]
-            },
-            {
-                "courier_id": 2,
-                "courier_type": "bike",
-                "regions": [22],
-                "working_hours": ["09:00-18:00"]
-            },
-            {
-                "courier_id": 3,
-                "courier_type": "car",
-                "regions": [12, 22, 23, 33],
-                "working_hours": []
-            }
-        ]
-    }
-    resp = api_client.post(reverse('main:couriers__create'), payload)
+def test_couriers_create_successful(api_client, payload_to_create_couriers):
+    resp = api_client.post(reverse('main:couriers__create'), payload_to_create_couriers)
     assert resp.data == {'couriers': [{'id': 1}, {'id': 2}, {'id': 3}]}
     assert resp.status_code == 201
 
@@ -136,4 +117,43 @@ def test_courier_patch_failed(payload_to_update, api_client):
     }
     api_client.post(reverse('main:couriers__create'), payload_to_create)
     resp = api_client.patch(f'/couriers/{courier_id}', payload_to_update)
+    assert resp.status_code == 400
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_get_courier_info_successful(api_client, create_orders_and_couriers):
+    courier_id = 1
+    api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
+    complete_data = {"courier_id": 1, "order_id": 1, "complete_time": COMPLETE_TIME.strftime('%Y-%m-%dT%H:%M:%S')}
+    api_client.post(reverse('main:orders_complete'), complete_data)
+    resp = api_client.get(f'/couriers/{courier_id}')
+    assert resp.status_code == 200
+    assert resp.data == {
+        'courier_id': 1,
+        'courier_type': 'foot',
+        'working_hours': ['11:35-14:05', '09:00-18:00'],
+        'regions': [1, 12, 22],
+        'rating': 2.5,
+        'earnings': 1000
+    }
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_get_courier_info_successful_without_complete_orders(api_client, create_orders_and_couriers):
+    courier_id = 1
+    api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
+    resp = api_client.get(f'/couriers/{courier_id}')
+    assert resp.status_code == 200
+    assert resp.data == {
+        'courier_id': 1,
+        'courier_type': 'foot',
+        'working_hours': ['11:35-14:05', '09:00-18:00'],
+        'regions': [1, 12, 22],
+    }
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_get_courier_info_failed_not_found_courier(api_client, create_orders_and_couriers):
+    courier_id = 10
+    resp = api_client.get(f'/couriers/{courier_id}')
     assert resp.status_code == 400

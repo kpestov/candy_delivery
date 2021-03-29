@@ -72,13 +72,14 @@ class OrdersAssignView(GenericAPIView):
     """View для назначения курьеру максимального количества заказов, подходящих по весу, району и графику работы"""
     serializer_class = OrdersAssignSerializer
     queryset = Order
+    current_date = timezone.now()
 
     def post(self, request):
         validated_courier_data = CourierSerializerIn(data=request.data).load()
         courier_orders = (
             Courier.objects
             .get(id=validated_courier_data['courier_id'])
-            .get_suitable_orders(today=timezone.now())
+            .get_suitable_orders(today=self.current_date)
         )
 
         assigned_orders = self.get_serializer(courier_orders, data=request.data, partial=True).load_and_save()

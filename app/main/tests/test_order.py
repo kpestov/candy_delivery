@@ -1,34 +1,19 @@
+import pytz
 import pytest
 
+from datetime import datetime
+from unittest.mock import patch
+
 from app.main.utils import reverse
+
+CURRENT_DATE = datetime(2021, 3, 29, 11, 0, 0, tzinfo=pytz.utc)
+COMPLETE_TIME = datetime(2021, 3, 29, 11, 30, 0, tzinfo=pytz.utc)
 
 pytestmark = [pytest.mark.django_db]
 
 
-def test_orders_create_successful(api_client):
-    payload = {
-        "data": [
-            {
-                "order_id": 1,
-                "weight": 0.23,
-                "region": 12,
-                "delivery_hours": ["09:00-18:00"]
-            },
-            {
-                "order_id": 2,
-                "weight": 15,
-                "region": 1,
-                "delivery_hours": ["09:00-18:00"]
-            },
-            {
-                "order_id": 3,
-                "weight": 0.01,
-                "region": 22,
-                "delivery_hours": ["09:00-12:00", "16:00-21:30"]
-            }
-        ]
-    }
-    resp = api_client.post(reverse('main:orders__create'), payload)
+def test_orders_create_successful(api_client, payload_to_create_orders):
+    resp = api_client.post(reverse('main:orders__create'), payload_to_create_orders)
     assert resp.data == {'orders': [{'id': 1}, {'id': 2}, {'id': 3}]}
     assert resp.status_code == 201
 
@@ -93,56 +78,65 @@ def test_orders_create_failed_properly_collect_invalid_items(api_client):
     assert resp.status_code == 400
 
 
-def test_orders_assign_not_found_suitable_orders(api_client):
-    payload_to_create_courier = {
-        "data": [
-            {
-                "courier_id": 1,
-                "courier_type": "foot",
-                "regions": [1, 12, 22],
-                "working_hours": ["11:35-14:05", "09:00-18:00"]
-            },
-        ]
-    }
-    payload_to_create_orders = {
-        "data": [
-            {
-                "order_id": 1,
-                "weight": 0.23,
-                "region": 7,
-                "delivery_hours": ["09:00-23:00"]
-            }
-        ]
-    }
-    api_client.post(reverse('main:couriers__create'), payload_to_create_courier)
+def test_orders_assign_not_found_suitable_orders(api_client, payload_to_create_couriers, payload_to_create_orders):
+    payload_to_create_orders.update(
+        {
+            "data": [
+                {
+                    "order_id": 1,
+                    "weight": 0.23,
+                    "region": 7,
+                    "delivery_hours": ["09:00-23:00"]
+                }
+            ]
+        }
+    )
+    api_client.post(reverse('main:couriers__create'), payload_to_create_couriers)
     api_client.post(reverse('main:orders__create'), payload_to_create_orders)
     resp = api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
     assert resp.status_code == 200
     assert resp.data == {"orders": []}
 
 
-def test_orders_assign_not_found_courier(api_client):
-    payload_to_create_courier = {
-        "data": [
-            {
-                "courier_id": 2,
-                "courier_type": "foot",
-                "regions": [1, 12, 22],
-                "working_hours": ["11:35-14:05", "09:00-18:00"]
-            },
-        ]
-    }
-    payload_to_create_orders = {
-        "data": [
-            {
-                "order_id": 7,
-                "weight": 0.23,
-                "region": 7,
-                "delivery_hours": ["09:00-23:00"]
-            }
-        ]
-    }
-    api_client.post(reverse('main:couriers__create'), payload_to_create_courier)
-    api_client.post(reverse('main:orders__create'), payload_to_create_orders)
+def test_orders_assign_not_found_courier(api_client, create_orders_and_couriers):
     resp = api_client.post(reverse('main:orders_assign'), {'courier_id': 8})
+    assert resp.status_code == 400
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_orders_assign_successful(api_client, create_orders_and_couriers):
+    resp = api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
+    assert resp.status_code == 200
+    assert resp.data == {"orders": [{"id": 1}, {"id": 3}], "assign_time": CURRENT_DATE}
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_orders_complete_successful(api_client, create_orders_and_couriers):
+    api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
+    complete_data = {"courier_id": 1, "order_id": 1, "complete_time": COMPLETE_TIME.strftime('%Y-%m-%dT%H:%M:%S')}
+    resp = api_client.post(reverse('main:orders_complete'), complete_data)
+    assert resp.status_code == 200
+    assert resp.data == {"order_id": 1}
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_orders_complete_failed_not_found_order(api_client, create_orders_and_couriers):
+    api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
+    complete_data = {"courier_id": 1, "order_id": 4, "complete_time": COMPLETE_TIME.strftime('%Y-%m-%dT%H:%M:%S')}
+    resp = api_client.post(reverse('main:orders_complete'), complete_data)
+    assert resp.status_code == 400
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_orders_complete_failed_assign_to_another_courier(api_client, create_orders_and_couriers):
+    api_client.post(reverse('main:orders_assign'), {'courier_id': 1})
+    complete_data = {"courier_id": 2, "order_id": 1, "complete_time": COMPLETE_TIME.strftime('%Y-%m-%dT%H:%M:%S')}
+    resp = api_client.post(reverse('main:orders_complete'), complete_data)
+    assert resp.status_code == 400
+
+
+@patch('app.main.views.OrdersAssignView.current_date', new=CURRENT_DATE)
+def test_orders_complete_failed_not_assigned_order(api_client, create_orders_and_couriers):
+    complete_data = {"courier_id": 1, "order_id": 1, "complete_time": COMPLETE_TIME.strftime('%Y-%m-%dT%H:%M:%S')}
+    resp = api_client.post(reverse('main:orders_complete'), complete_data)
     assert resp.status_code == 400

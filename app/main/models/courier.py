@@ -235,7 +235,6 @@ class Courier(models.Model):
         Добавляет заказы курьеру, пока у него есть свободное место.
         Если места больше нет, то возвращается текущий набор заказов
         """
-        # todo: сделать так, чтобы в метод попадал только объект заказа и все!
         current_weight = 0
         current_assigned_orders = self.get_assigned_orders()
         if current_assigned_orders:
